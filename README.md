@@ -1,43 +1,66 @@
+<div align="center">
+
 # Modern Treasury Platform — MCP + a working local API
 
-Two things live here:
+**A complete, runnable implementation of Modern Treasury's Platform API — all 186 endpoints — generated from the official OpenAPI specification. Plus the MCP configuration that lets an AI editor read the real API reference while you work.**
 
-1. **MCP configuration** for the Modern Treasury documentation server at
-   `https://docs.moderntreasury.com/mcp`, so an AI editor reads the Platform API
-   reference and endpoint definitions directly.
-2. **A functional implementation of the entire endpoint catalog** — all **186
-   operations across 111 paths** from the published OpenAPI specification,
-   served locally with real create / read / update / delete behaviour, request
-   validation, pagination, idempotency, rate limits, and webhook events.
+[![Node](https://img.shields.io/badge/Node.js-%E2%89%A5%2020.12-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)](https://expressjs.com)
+[![OpenAPI](https://img.shields.io/badge/spec--driven-OpenAPI%203-6BA539?logo=openapiinitiative&logoColor=white)](spec/mt_openapi_spec_v1.yaml)
+[![MCP](https://img.shields.io/badge/MCP-Model%20Context%20Protocol-D97757)](https://modelcontextprotocol.io)
 
-```
+[![Operations](https://img.shields.io/badge/operations-186%20%2F%20186-brightgreen)](docs/ENDPOINTS.md)
+[![Paths](https://img.shields.io/badge/paths-111-blue)](docs/ENDPOINTS.md)
+[![Tests](https://img.shields.io/badge/tests-186%20catalog%20%2B%2042%20behaviour-brightgreen)](scripts/smoke.js)
+[![Runtime deps](https://img.shields.io/badge/runtime%20deps-4-informational)](package.json)
+[![License](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
+
+</div>
+
+```sh
 npm install
 npm start      # http://localhost:4010
 npm test       # 186/186 operations + 42 behaviour checks
 ```
 
-```text
-Modern Treasury API listening on http://localhost:4010
-  mode:        sandbox (test)
-  catalog:     186 operations / 111 paths
-  credentials: test-organization:test-api-key
-  seeded:      136 records
-```
+---
 
-Nothing is hand-written per endpoint. `spec/mt_openapi_spec_v1.yaml` (vendored
-from [Modern-Treasury/modern-treasury-openapi](https://github.com/Modern-Treasury/modern-treasury-openapi))
-is parsed into a route table at boot, each path is classified, and generic
-handlers serve it — so the catalog cannot drift from the spec it ships with. The
-test suite then calls every one of the 186 operations and validates each
-response against the schema the specification declares for it.
+## In plain English
 
-| | |
+> *For anyone reading this who doesn't write code — this section is for you. Everything after it is engineering detail.*
+
+Modern Treasury sells software that moves money between bank accounts. Companies connect to it through an **API**: a catalog of 186 operations — *create a payment*, *list invoices*, *reconcile a ledger* — that one program calls on another.
+
+Building against a payments API is slow and risky. You cannot test "what happens when this transfer fails" against a real bank, and you cannot hand a new developer a live account on day one.
+
+**This project solves that in two ways:**
+
+| | What it does | Why it matters |
+| --- | --- | --- |
+| **A local copy of the whole API** | Every one of the 186 operations runs on your own machine. It accepts requests, stores records, returns realistic responses, and enforces the same rules as the real service — authentication, validation, rate limits, pagination, webhooks. | A developer can build and test a full integration in minutes: no account, no database, no bank involved, and no chance of moving real money by accident. |
+| **AI editor integration (MCP)** | One configuration file connects AI coding tools (Claude Code, Cursor, Windsurf, Claude Desktop) to Modern Treasury's official documentation server. | Ask "what fields does a payment order need?" and the answer comes from the live, authoritative reference instead of the model's guesswork. |
+
+**The part worth noticing:** none of the 186 endpoints were written by hand. The project reads Modern Treasury's own published specification — the machine-readable contract describing every endpoint — and *builds itself* from it at startup. Point it at a newer specification and the implementation follows. There is nothing to keep in sync, which is the usual reason this kind of tool rots within a quarter.
+
+**It is verified, not just claimed.** An automated test suite calls all 186 operations and checks each response against the shape the specification demands, then runs 42 further checks on the behaviours above. The numbers in the badges at the top of this page are that suite's output.
+
+<details>
+<summary><strong>What this project demonstrates</strong> (click to expand)</summary>
+
+<br>
+
+| Area | Evidence in the code |
 | --- | --- |
-| Operations implemented | 186 / 186 (111 paths, 48 API groups) |
-| Stored collections | 47, seeded with referentially consistent records |
-| Purpose-written handlers | 20; the other 166 are driven generically from the spec |
-| Tests | 186 catalog operations + 42 behaviour checks, all passing |
-| Runtime dependencies | 4 — `express`, `ajv`, `ajv-formats`, `yaml` |
+| API design & HTTP semantics | Correct status codes, a consistent error envelope, cursor pagination, idempotency keys, rate-limit headers |
+| Working from a specification | A 186-operation OpenAPI document parsed into a live route table; its schemas reused for both request validation and response assertions |
+| Code economy | ~20 purpose-written handlers cover the non-CRUD operations; the other 166 are served generically. 4 runtime dependencies, no database, no Docker |
+| Testing | Full-catalog coverage with schema assertions, plus targeted behavioural tests; hermetic, so local environment cannot skew a result |
+| Domain literacy | Payments vocabulary — ACH, payment orders, reversals, ledgers, counterparties, webhooks — modelled coherently |
+| Developer experience | One command to run, seeded data whose references all resolve, generated endpoint docs, an HTML index of every route |
+| AI tooling | Model Context Protocol configuration across four editors, with a curl-level verification path |
+| Honest engineering | A specific, written [Known limits](#known-limits) section and a prioritised list of what to build next |
+
+</details>
 
 ---
 
@@ -94,6 +117,14 @@ curl -sX POST https://docs.moderntreasury.com/mcp \
 
 Requires Node ≥ 20.12 (the start script uses Node's built-in
 `--env-file-if-exists`). No database, no Docker, no account.
+
+```text
+Modern Treasury API listening on http://localhost:4010
+  mode:        sandbox (test)
+  catalog:     186 operations / 111 paths
+  credentials: test-organization:test-api-key
+  seeded:      136 records
+```
 
 HTTP basic auth: organization id as the username, API key as the password.
 
@@ -224,6 +255,11 @@ Outside the catalog, under a prefix no real endpoint can collide with:
 
 ## How it works
 
+Nothing is hand-written per endpoint. `spec/mt_openapi_spec_v1.yaml` (vendored
+from [Modern-Treasury/modern-treasury-openapi](https://github.com/Modern-Treasury/modern-treasury-openapi))
+is parsed into a route table at boot, each path is classified, and generic
+handlers serve it — so the catalog cannot drift from the spec it ships with.
+
 ```text
 spec/mt_openapi_spec_v1.yaml
           │
@@ -243,6 +279,14 @@ spec/mt_openapi_spec_v1.yaml
                                   validation, ping  (src/routes/special.js)
 ```
 
+| | |
+| --- | --- |
+| Operations implemented | 186 / 186 (111 paths, 48 API groups) |
+| Stored collections | 47, seeded with referentially consistent records |
+| Purpose-written handlers | 20; the other 166 are driven generically from the spec |
+| Tests | 186 catalog operations + 42 behaviour checks, all passing |
+| Runtime dependencies | 4 — `express`, `ajv`, `ajv-formats`, `yaml` |
+
 Records are synthesized from the response schema, then the request body is
 merged **through** that schema: nested objects merge field by field, arrays of
 objects merge onto a complete item, fields the schema does not declare are
@@ -250,6 +294,9 @@ dropped, and resource type names are translated to whichever spelling the
 schema expects (`payment_orders` / `payment_order` / `PaymentOrder`). Generation
 is deterministic and cycle-safe, so a payment order's `current_return` — itself
 a return, with its own `current_return` — terminates instead of recursing.
+
+<details>
+<summary><strong>Source layout</strong> (click to expand)</summary>
 
 ```text
 spec/mt_openapi_spec_v1.yaml   the published specification (the source of truth)
@@ -274,6 +321,8 @@ src/routes/register.js         mounting, most specific path first
 scripts/smoke.js               the test suite
 scripts/catalog.js             regenerate docs/ENDPOINTS.md
 ```
+
+</details>
 
 ---
 
