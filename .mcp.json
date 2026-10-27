@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "moderntreasury-platform": {
+      "type": "http",
+      "url": "https://docs.moderntreasury.com/mcp"
+    }
+  }
+}
